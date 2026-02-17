@@ -145,7 +145,7 @@
     // Fungsi Pengganti google.script.run untuk Fetch API
     async function sendApiRequest(action, data = {}) {
         // DETEKSI URL DEFAULT
-        if (GAS_API_URL.includes("URL_DEPLOYMENT_ANDA_DISINI")) {
+        if (GAS_API_URL.includes("https://script.google.com/macros/s/AKfycbyzTnz5czH12WQGmRRkxQbAr6CgbpN_L21sG7ASZZqNGiXgr9zK327-HOLPUDfyPByZVw/exec")) {
             alert("ERROR: URL Deployment belum diganti!\n\nSilakan edit file index.html di baris 160-an dan masukkan URL Web App dari Google Apps Script.");
             return { status: 'error', message: 'URL Configuration Error' };
         }
