@@ -144,17 +144,32 @@
 
     // Fungsi Pengganti google.script.run untuk Fetch API
     async function sendApiRequest(action, data = {}) {
+        // DETEKSI URL DEFAULT
+        if (GAS_API_URL.includes("URL_DEPLOYMENT_ANDA_DISINI")) {
+            alert("ERROR: URL Deployment belum diganti!\n\nSilakan edit file index.html di baris 160-an dan masukkan URL Web App dari Google Apps Script.");
+            return { status: 'error', message: 'URL Configuration Error' };
+        }
+
         const payload = { action: action, ...data };
         try {
             const response = await fetch(GAS_API_URL, {
                 method: "POST",
                 body: JSON.stringify(payload)
             });
-            const result = await response.json();
-            return result;
+            
+            // Coba ambil text dulu untuk debugging jika JSON gagal
+            const textResponse = await response.text();
+            
+            try {
+                return JSON.parse(textResponse);
+            } catch (e) {
+                console.error("Non-JSON Response from Server:", textResponse);
+                throw new Error("Server mengembalikan data bukan JSON (Mungkin error HTML atau salah URL). Cek Console.");
+            }
+            
         } catch (error) {
-            console.error("API Error:", error);
-            alert("Gagal terhubung ke server. Cek koneksi internet.");
+            console.error("API Error Full Details:", error);
+            alert("Gagal terhubung ke server.\n\nKemungkinan penyebab:\n1. URL Deployment salah/belum diganti.\n2. Permission Deploy bukan 'Anyone'.\n3. Koneksi internet terputus.\n\nCek Console Browser untuk detail.");
             return { status: 'error', message: 'Connection Failed' };
         }
     }
