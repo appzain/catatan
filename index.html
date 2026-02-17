@@ -65,6 +65,12 @@
             <h4 class="mb-1 fw-bold">Login Aplikasi</h4>
             <small class="text-muted">Masukkan kredensial Anda</small>
           </div>
+          
+          <!-- TOMBOL CEK KONEKSI (Hanya muncul jika error) -->
+          <div id="connectionStatus" class="alert alert-warning small d-none mb-3">
+             <i class="fas fa-exclamation-triangle"></i> Gagal terhubung. <button class="btn btn-link btn-sm p-0 align-baseline" onclick="testConnection()">Tes Koneksi Detail</button>
+          </div>
+
           <form id="formLogin" onsubmit="handleLogin(event)">
             <div class="form-floating mb-3"><input type="text" class="form-control" id="username" placeholder="Username" required><label for="username">Username / No Absen</label></div>
             <div class="input-group mb-3"><div class="form-floating" style="flex: 1 1 auto; width: 1%;"><input type="password" class="form-control" id="password" placeholder="Password" style="border-right: 0;" required><label for="password">Password</label></div><span class="input-group-text bg-white" style="border-left: 0;"><button type="button" class="btn btn-sm text-secondary" onclick="togglePasswordVisibility()" tabindex="-1"><i class="fas fa-eye" id="eyeIcon"></i></button></span></div>
@@ -140,7 +146,7 @@
   <script>
     // --- KONFIGURASI KONEKSI ---
     // GANTI URL DI BAWAH INI SETELAH DEPLOY GOOGLE APPS SCRIPT
-    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbykadzT4rVdGYTCrmJllZtrDuUbihDpiCnjnsKm9gb9IlIWZu89xqeLaG3f91HJo-XcRQ/exec";
+    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbw36uFJNvspX5HM8UnDxiNlJJPHPFLi34HoTUBu50fhusnjML-3F8Pg_J16_eS42gmHTw/exec";
 
     // Fungsi Pengganti google.script.run untuk Fetch API
     async function sendApiRequest(action, data = {}) {
@@ -154,6 +160,7 @@
         try {
             // FIX: Menggunakan Content-Type text/plain untuk menghindari Preflight CORS Check
             const response = await fetch(GAS_API_URL, {
+                redirect: "follow", // PENTING: Ikuti redirect dari Google
                 method: "POST",
                 headers: {
                     "Content-Type": "text/plain;charset=utf-8", 
@@ -167,14 +174,42 @@
             try {
                 return JSON.parse(textResponse);
             } catch (e) {
+                // INI BAGIAN PENTING: Tampilkan apa yang sebenarnya dikirim server
                 console.error("Non-JSON Response from Server:", textResponse);
-                throw new Error("Server mengembalikan data bukan JSON (Mungkin error HTML atau salah URL). Cek Console.");
+                
+                // Cek apakah error HTML dari Google (biasanya "Script function not found")
+                if(textResponse.includes("Script function not found")) {
+                    alert("ERROR SERVER: Fungsi tidak ditemukan.\n\nPenyebab: Anda mungkin belum melakukan 'New Version' saat deploy.\n\nSolusi: Buka Apps Script > Deploy > Manage Deployments > Edit (ikon pensil) > Version: New Version > Deploy.");
+                } else if(textResponse.includes("Google Drive")) {
+                    alert("ERROR PERMISSION: Tidak ada akses.\n\nPenyebab: Setting 'Who has access' saat deploy bukan 'Anyone'.\n\nSolusi: Deploy ulang dengan akses 'Anyone'.");
+                } else {
+                    alert("Server Error (Bukan JSON):\n\n" + textResponse.substring(0, 200) + "...\n\n(Cek Console untuk detail)");
+                }
+                
+                throw new Error("Server response not JSON: " + textResponse.substring(0, 100));
             }
             
         } catch (error) {
             console.error("API Error Full Details:", error);
-            alert("Gagal terhubung ke server.\n\nKemungkinan penyebab:\n1. URL Deployment salah/belum diganti.\n2. Permission Deploy bukan 'Anyone'.\n3. Koneksi internet terputus.\n\nCek Console Browser untuk detail.");
+            // Tampilkan tombol tes koneksi jika gagal
+            document.getElementById('connectionStatus').classList.remove('d-none');
+            
+            // Jangan alert jika error sudah di-handle di atas (non-json)
+            if(error.message !== "Server response not JSON") {
+                 alert("Gagal terhubung ke server.\n\nKemungkinan penyebab:\n1. Blokir CORS/Adblock (Coba matikan Adblock/Shield).\n2. Koneksi internet terputus.\n3. URL Deployment salah.");
+            }
             return { status: 'error', message: 'Connection Failed' };
+        }
+    }
+
+    // FUNGSI DEBUGGING MANUAL
+    function testConnection() {
+        const win = window.open(GAS_API_URL, '_blank');
+        if(win) {
+            win.focus();
+            alert("Tab baru dibuka ke URL Server.\n\nJika Anda melihat teks JSON: '{\"status\":\"online\"...}', berarti server HIDUP.\nMasalahnya ada pada blokir browser/CORS.");
+        } else {
+            alert("Izinkan pop-up untuk membuka tes koneksi.");
         }
     }
 
@@ -191,13 +226,14 @@
     
     // MODIFIED: Menggunakan sendApiRequest
     function handleLogin(e){ e.preventDefault(); showLoader(); 
+        document.getElementById('connectionStatus').classList.add('d-none'); // Reset status
         sendApiRequest('loginUser', { 
             username: document.getElementById('username').value, 
             password: document.getElementById('password').value 
         }).then(r=>{ 
             hideLoader(); 
             if(r.status==='success'){ localStorage.setItem('sppAppSession', JSON.stringify(r)); if(r.role==='admin') initAdmin(r.nama, r.aksesKelas); else initSiswa(r.nis); } 
-            else alert(r.message); 
+            else if (r.message) alert(r.message); 
         }); 
     }
 
@@ -209,6 +245,7 @@
     function loadData(){ showLoader(); 
         sendApiRequest('getDataAdmin', { targetKelas: currentAdminClass }).then(d=>{ 
             hideLoader(); 
+            if(d.status === 'error') return; // Silent fail on error
             allSiswaData = d.laporan; populateSearchDropdown(); applyFilter(); updateStats(d.laporan); 
         }); 
     }
@@ -216,7 +253,9 @@
     // MODIFIED
     function openKelolaAdmin() { showLoader(); 
         sendApiRequest('getDaftarAdmin').then(list => { 
-            hideLoader(); renderAdminTable(list); resetFormAdmin(); new bootstrap.Modal(document.getElementById('modalKelolaAdmin')).show(); 
+            hideLoader(); 
+            if(list.status === 'error') return;
+            renderAdminTable(list); resetFormAdmin(); new bootstrap.Modal(document.getElementById('modalKelolaAdmin')).show(); 
         }); 
     }
 
